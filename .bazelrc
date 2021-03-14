@@ -1,0 +1,26 @@
+build --experimental_strict_action_env=true
+build --host_force_python=PY3
+build --action_env=BAZEL_LINKLIBS=-l%:libstdc++.a
+build --action_env=BAZEL_LINKOPTS=-lm
+build --host_javabase=@bazel_tools//tools/jdk:remote_jdk11
+build --javabase=@bazel_tools//tools/jdk:remote_jdk11
+build --enable_platform_specific_config
+
+build:linux --copt=-fPIC
+build:linux --cxxopt=-std=c++17
+build:linux --conlyopt=-fexceptions
+build:linux --fission=dbg,opt
+build:linux --features=per_object_debug_info
+
+build:clang --action_env=BAZEL_COMPILER=clang
+build:clang --linkopt=-fuse-ld=lld
+
+build:libc++ --config=clang
+build:libc++ --action_env=CXXFLAGS=-stdlib=libc++
+build:libc++ --action_env=LDFLAGS=-stdlib=libc++
+build:libc++ --action_env=BAZEL_CXXOPTS=-stdlib=libc++
+build:libc++ --action_env=BAZEL_LINKLIBS=-l%:libc++.a:-l%:libc++abi.a
+build:libc++ --action_env=BAZEL_LINKOPTS=-lm:-pthread
+build:libc++ --define force_libcpp=enabled
+
+try-import %workspace%/user.bazelrc

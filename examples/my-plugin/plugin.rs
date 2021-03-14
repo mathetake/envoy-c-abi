@@ -1,0 +1,57 @@
+use log::{trace, debug, error, info, warn};
+use proxy_wasm::traits::{Context, HttpContext};
+use proxy_wasm::types::*;
+
+#[no_mangle]
+pub fn _start() {
+    proxy_wasm::set_log_level(LogLevel::Trace);
+    proxy_wasm::set_http_context(|context_id, _| -> Box<dyn HttpContext> {
+        Box::new(TestStream { context_id })
+    });
+}
+
+struct TestStream {
+    context_id: u32,
+}
+
+impl HttpContext for TestStream {
+    fn on_http_request_headers(&mut self, _: usize) -> Action {
+        if let Some(path) = self.get_http_request_header(":path") {
+            info!("header path {}", path);
+        }
+        Action::Continue
+    }
+
+    fn on_http_request_body(&mut self, body_size: usize, _: bool) -> Action {
+        if let Some(body) = self.get_http_request_body(0, body_size) {
+            error!("onBody {}", String::from_utf8(body).unwrap());
+        }
+        Action::Continue
+    }
+
+    fn on_http_response_headers(&mut self, _: usize) -> Action {
+        self.set_http_response_header("test-status", Some("OK"));
+        Action::Continue
+    }
+
+    fn on_http_response_trailers(&mut self, _: usize) -> Action {
+        Action::Pause
+    }
+
+    fn on_log(&mut self) {
+        let path = self
+            .get_http_request_header(":path")
+            .unwrap_or(String::from(""));
+        let status = self
+            .get_http_response_header(":status")
+            .unwrap_or(String::from(""));
+        warn!("onLog {} {} {}", self.context_id, path, status);
+    }
+}
+
+impl Context for TestStream {
+    fn on_done(&mut self) -> bool {
+        warn!("onDone {}", self.context_id);
+        true
+    }
+}
