@@ -272,15 +272,10 @@
   class NullVmPluginImpl : public proxy_wasm::NullVmPlugin {                                       \
   public:                                                                                          \
     NullVmPluginImpl() {                                                                           \
-      call_void_0_ = {                                                                             \
-          {                                                                                        \
-              "_start",                                                                            \
-              [](ContextBase *context) {                                                           \
-                SaveRestoreContext saved_context(context);                                         \
-                plugin_name##__start();                                                            \
-              },                                                                                   \
-          },                                                                                       \
-      };                                                                                           \
+      /* This is necessary since we need to call _start on each thread to initialize Dispatcher.   \
+       * TODO(mathetake): maybe better to resolve this issue in Rust SDK side. */                  \
+      plugin_name##__start();                                                                      \
+                                                                                                   \
       call_void_1_ = {{                                                                            \
                           "proxy_on_tick",                                                         \
                           [](ContextBase *context, Word context_id) {                              \
@@ -524,7 +519,7 @@
   }                                                                                                \
                                                                                                    \
   /* register the plugin */                                                                        \
-  proxy_wasm::RegisterNullVmPluginFactory plugin_name(#plugin_name, [] {       \
+  proxy_wasm::RegisterNullVmPluginFactory plugin_name(#plugin_name, [] {                           \
     return std::make_unique<NullVmPluginImpl>();                                                   \
   });                                                                                              \
   }                                                                                                \
