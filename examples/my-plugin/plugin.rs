@@ -1,57 +1,62 @@
-use log::{trace, debug, error, info, warn};
-use proxy_wasm::traits::{Context, HttpContext};
+use log::trace;
+use proxy_wasm::traits::*;
 use proxy_wasm::types::*;
 
 #[no_mangle]
 pub fn _start() {
     proxy_wasm::set_log_level(LogLevel::Trace);
-    proxy_wasm::set_http_context(|context_id, _| -> Box<dyn HttpContext> {
-        Box::new(TestStream { context_id })
-    });
+    proxy_wasm::set_root_context(|_| -> Box<dyn RootContext> {
+        Box::new(HttpHeadersRoot)
+     });
 }
 
-struct TestStream {
+struct HttpHeadersRoot;
+
+impl Context for HttpHeadersRoot {}
+
+impl RootContext for HttpHeadersRoot {
+    fn get_type(&self) -> Option<ContextType> {
+        Some(ContextType::HttpContext)
+    }
+
+    fn create_http_context(&self, context_id: u32) -> Option<Box<dyn HttpContext>> {
+        Some(Box::new(HttpHeaders { context_id }))
+    }
+}
+
+struct HttpHeaders {
     context_id: u32,
 }
 
-impl HttpContext for TestStream {
-    fn on_http_request_headers(&mut self, _: usize) -> Action {
-        if let Some(path) = self.get_http_request_header(":path") {
-            info!("header path {}", path);
-        }
-        Action::Continue
-    }
+impl Context for HttpHeaders {}
 
-    fn on_http_request_body(&mut self, body_size: usize, _: bool) -> Action {
-        if let Some(body) = self.get_http_request_body(0, body_size) {
-            error!("onBody {}", String::from_utf8(body).unwrap());
+impl HttpContext for HttpHeaders {
+    fn on_http_request_headers(&mut self, _: usize) -> Action {
+        for (name, value) in &self.get_http_request_headers() {
+            println!("#{} -> {}: {}", self.context_id, name, value);
         }
-        Action::Continue
+
+        match self.get_http_request_header(":path") {
+            Some(path) if path == "/hello" => {
+                self.send_http_response(
+                    200,
+                    vec![("Hello", "World"), ("Powered-By", "proxy-wasm")],
+                    Some(b"Hellto, World!\n"),
+                );
+                Action::Pause
+            }
+            _ => Action::Continue,
+        }
     }
 
     fn on_http_response_headers(&mut self, _: usize) -> Action {
-        self.set_http_response_header("test-status", Some("OK"));
+        for (name, value) in &self.get_http_response_headers() {
+            println!("#{} <- {}: {}", self.context_id, name, value);
+        }
         Action::Continue
     }
 
-    fn on_http_response_trailers(&mut self, _: usize) -> Action {
-        Action::Pause
-    }
-
     fn on_log(&mut self) {
-        let path = self
-            .get_http_request_header(":path")
-            .unwrap_or(String::from(""));
-        let status = self
-            .get_http_response_header(":status")
-            .unwrap_or(String::from(""));
-        warn!("onLog {} {} {}", self.context_id, path, status);
-    }
-}
-
-impl Context for TestStream {
-    fn on_done(&mut self) -> bool {
-        warn!("onDone {}", self.context_id);
-        true
+        println!("#{} completed.", self.context_id);
     }
 }
